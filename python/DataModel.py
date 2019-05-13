@@ -193,7 +193,6 @@ class DataModel(object):
         self.logger.debug("has_ground_result(): %s", res)
         return res
 
-
 class ImageProcessing(object):
     def __init__(self):
         super(ImageProcessing, self).__init__()
@@ -226,6 +225,7 @@ class ImageProcessing(object):
 
     @staticmethod
     def detect_star_points(img_gray, mask=None, resize_length=2200):
+        
         logging.debug("detect_star_point()")
         logging.debug("resize_length = %s", resize_length)
 
@@ -357,7 +357,7 @@ class ImageProcessing(object):
         return features
 
     @staticmethod
-    def find_initial_match(feature1, feature2):
+    def find_initial_match(feature1, feature2): 
         logging.debug("find_initial_match()")
         measure_dist_mat = spd.cdist(feature1["feature"], feature2["feature"], "cosine")
         pts1, pts2 = feature1["pts"], feature2["pts"]
@@ -472,6 +472,7 @@ if __name__ == "__main__":
         logging.debug("image: %s", file)
         data_model.add_image("./images/"+file)
     
+    # first image as ref_img
     ref_img = data_model.images[0]
     f = ref_img.focal_len
     img_shape = ref_img.fullsize_gray_image.shape
@@ -489,21 +490,25 @@ if __name__ == "__main__":
     data_model.final_sky_img = np.copy(ref_img.original_image).astype("float32") / np.iinfo(
         ref_img.original_image.dtype).max
 
-    img = data_model.images[1]
-    pts, vol = ImageProcessing.detect_star_points(img.fullsize_gray_image)
-    sph = ImageProcessing.convert_to_spherical_coord(pts, img_size, f)
-    feature = ImageProcessing.extract_point_features(sph, vol)
-    img.features["pts"] = pts
-    img.features["sph"] = sph
-    img.features["vol"] = vol
-    img.features["feature"] = feature
+    imagelist = [data_model.final_sky_img]
+    for i in range(len(data_model.images)-1):
+        img = data_model.images[i+1]
+        pts, vol = ImageProcessing.detect_star_points(img.fullsize_gray_image)
+        sph = ImageProcessing.convert_to_spherical_coord(pts, img_size, f)
+        feature = ImageProcessing.extract_point_features(sph, vol)
+        img.features["pts"] = pts
+        img.features["sph"] = sph
+        img.features["vol"] = vol
+        img.features["feature"] = feature
 
-    pair_idx = ImageProcessing.find_initial_match(img.features, ref_img.features)
-    tf, pair_idx = ImageProcessing.fine_tune_transform(img.features, ref_img.features, pair_idx)
-    img_tf = cv2.warpPerspective(img.original_image, tf[0], tuple(img_size))
-    img_tf = img_tf.astype("float32") / np.iinfo(img_tf.dtype).max
+        pair_idx = ImageProcessing.find_initial_match(img.features, ref_img.features)
+        tf, pair_idx = ImageProcessing.fine_tune_transform(img.features, ref_img.features, pair_idx)
+        img_tf = cv2.warpPerspective(img.original_image, tf[0], tuple(img_size))
+        img_tf = img_tf.astype("float32") / np.iinfo(img_tf.dtype).max
+        imagelist.append(img_tf)
+    
+    data_model.final_sky_img = np.array(imagelist).mean(axis=0)
 
-    data_model.final_sky_img = data_model.final_sky_img / 2  + img_tf / 2
     result_img = (data_model.final_sky_img * np.iinfo("uint16").max).astype("uint16")
     # ImageProcessing.save_tif_image("test.tif", result_img, data_model.images[0].exif_info)
     ImageProcessing.save_tif_image("test.tif", result_img)
