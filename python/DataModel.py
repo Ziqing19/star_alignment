@@ -259,30 +259,30 @@ class ImageProcessing(object):
         while True:
             try:
                 img_rec = ImageProcessing._try_wavedec(img_blr, resize_factor=resize_factor) * mask
-                bw = ((img_rec > np.percentile(img_rec[mask], 99.5)) * mask).astype(np.uint8) * 255
+                bw = ((img_rec > np.percentile(img_rec[mask], 99.2)) * mask).astype(np.uint8) * 255
                 # img_rec = ImageProcessing._try_wavedec(img_blr, resize_factor=resize_factor)
                 # bw = ((img_rec > np.percentile(img_rec, 99.5))).astype(np.uint8) * 255
                 bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
-                _, contours, _ = cv2.findContours(np.copy(bw), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-                contours = filter(lambda x: len(x) > 5, contours)
+                contours, hierarchy = cv2.findContours(np.copy(bw), cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+                contours = list(filter(lambda x: len(x) > 5, contours))
                 logging.debug("%d star points detected", len(contours))
 
                 if len(contours) > 400:
                     break
                 else:
-                    raise ValueError, "No enough points"
+                    raise ValueError("No enough points")
             except ValueError as e:
                 if resize_factor >= 1:
-                    raise ValueError, "Cannot detect enough star points"
+                    raise ValueError("Cannot detect enough star points")
                 else:
                     resize_factor *= 2
         logging.debug("resize factor = %f", resize_factor)
 
-        elps = map(cv2.fitEllipse, contours)
-        centroids = np.array(map(lambda e: e[0], elps))
-        areas = np.array(map(lambda x: cv2.contourArea(x) + 0.5 * len(x), contours))
-        eccentricities = np.sqrt(np.array(map(lambda x: 1 - (x[1][0] / x[1][1]) ** 2, elps)))
+        elps = list(map(cv2.fitEllipse, contours))
+        centroids = np.array(list(map(lambda e: e[0], elps)))
+        areas = np.array(list(map(lambda x: cv2.contourArea(x) + 0.5 * len(x), contours)))
+        eccentricities = np.sqrt(np.array(list(map(lambda x: 1 - (x[1][0] / x[1][1]) ** 2, elps))))
 
         mask = np.zeros(bw.shape, np.uint8)
         intensities = np.zeros(areas.shape)
@@ -467,10 +467,10 @@ if __name__ == "__main__":
     logging.basicConfig(format=logging_format, level=logging_level)
 
     data_model = DataModel()
-    img_tmpl = u"/Volumes/ZJJ-4TB/Photos/17.08.21 Eclipse Trip/6DII/IMG_{:04d}_0.tif"
-    for p in [img_tmpl.format(i) for i in (79, 80, 81, 82)]:
-        logging.debug("image: %s", p)
-        data_model.add_image(p)
+    for file in os.listdir("./images"):
+        print(file)
+        logging.debug("image: %s", file)
+        data_model.add_image("./images/"+file)
     
     ref_img = data_model.images[0]
     f = ref_img.focal_len
@@ -505,5 +505,6 @@ if __name__ == "__main__":
 
     data_model.final_sky_img = data_model.final_sky_img / 2  + img_tf / 2
     result_img = (data_model.final_sky_img * np.iinfo("uint16").max).astype("uint16")
-    ImageProcessing.save_tif_image("test.tif", result_img, data_model.images[0].exif_info)
+    # ImageProcessing.save_tif_image("test.tif", result_img, data_model.images[0].exif_info)
+    ImageProcessing.save_tif_image("test.tif", result_img)
 
